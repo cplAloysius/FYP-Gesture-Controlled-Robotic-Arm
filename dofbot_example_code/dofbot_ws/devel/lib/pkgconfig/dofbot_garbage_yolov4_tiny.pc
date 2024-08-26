@@ -1,8 +1,0 @@
-prefix=/root/dofbot_ws/devel
-
-Name: dofbot_garbage_yolov4_tiny
-Description: Description of dofbot_garbage_yolov4_tiny
-Version: 0.0.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 

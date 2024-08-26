@@ -1,8 +1,0 @@
-prefix=/root/dofbot_ws/devel
-
-Name: dofbot_mediapipe
-Description: Description of dofbot_mediapipe
-Version: 0.0.0
-Cflags: 
-Libs: -L${prefix}/lib 
-Requires: 
