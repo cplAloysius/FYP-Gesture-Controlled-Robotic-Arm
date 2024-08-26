@@ -22,6 +22,7 @@ class identify_GetTarget:
         # Creates a handle to the ROS service to invoke.
         # 创建用于调用的ROS服务的句柄
         self.client = rospy.ServiceProxy("dofbot_kinemarics", kinemarics)
+        self.move_status = 0
 
     def follow_function(self, img, HSV_config):
         (color_lower, color_upper) = HSV_config
@@ -154,13 +155,14 @@ class identify_GetTarget:
         :param msg: (颜色,位置)  (color, position)
         '''
         if xy != None: self.xy = xy
-        move_status=0
+        #move_status=0
         if cntr == None:
             return
-        else: move_status = 1
-        if move_status==1:
-            self.arm.Arm_Buzzer_On(1)
-            sleep(0.5)
+        else: 
+            self.move_status = 1
+
+        self.arm.Arm_Buzzer_On(1)
+        sleep(0.5)
         
         try:
             # Here, ROS inversely solves the communication to obtain the rotation angle of each joint
@@ -168,23 +170,34 @@ class identify_GetTarget:
             joints = self.server_joint(cntr)
             # call the move function
             # 调取移动函数
-            self.grap.identify_move(joints)
+            holding = self.grap.identify_move(joints)
+            if not holding:
+                # initial position
+                # 初始位置
+                joints_0 = [self.xy[0], self.xy[1], 0, 0, 90, 30]
+                # move to initial position
+                # 移动至初始位置
+                self.arm.Arm_serial_servo_write6_array(joints_0, 500)
+                sleep(0.5)
         except Exception: print("sqaure_pos empty")
-        if move_status==1:
-            # set up
-            # 架起
-            joints_uu = [90, 80, 50, 50, 265, 30]
-            # Move over the object's position
-            # 移动至物体位置上方
-            self.arm.Arm_serial_servo_write6_array(joints_uu, 1000)
-            sleep(1)
-            # initial position
-            # 初始位置
-            joints_0 = [self.xy[0], self.xy[1], 0, 0, 90, 30]
-            # move to initial position
-            # 移动至初始位置
-            self.arm.Arm_serial_servo_write6_array(joints_0, 500)
-            sleep(0.5)
+            
+        self.move_status = 0
+        
+        # if move_status==1:
+        #     # set up
+        #     # 架起
+        #     # joints_uu = [90, 80, 50, 50, 265, 30]
+        #     # Move over the object's position
+        #     # 移动至物体位置上方
+        #     # self.arm.Arm_serial_servo_write6_array(joints_uu, 1000)
+        #     # sleep(1)
+        #     # initial position
+        #     # 初始位置
+        #     joints_0 = [self.xy[0], self.xy[1], 0, 0, 90, 30]
+        #     # move to initial position
+        #     # 移动至初始位置
+        #     self.arm.Arm_serial_servo_write6_array(joints_0, 500)
+        #     sleep(0.5)
 
     def server_joint(self, posxy):
         '''
