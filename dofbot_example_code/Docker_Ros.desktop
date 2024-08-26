@@ -1,0 +1,6 @@
+[Desktop Entry]
+Encoding=UTF-8
+Type=Application
+Name=Docker_Ros
+Exec=lxterminal -e bash -c "bash /home/pi/Docker_Ros.sh;$SHELL"
+Terminal=true
