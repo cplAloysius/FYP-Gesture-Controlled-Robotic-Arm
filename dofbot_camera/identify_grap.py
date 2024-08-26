@@ -14,8 +14,9 @@ class identify_grap:
         # Clamping jaw tightening angle
         # 夹爪加紧角度
         self.grap_joint = 135
+        self.holding = 0
 
-    def move(self, joints, joints_down):
+    def pickup(self, joints):
         '''
         Moving process
         移动过程
@@ -25,7 +26,7 @@ class identify_grap:
         '''
         joints_uu = [90, 80, 50, 50, 265, self.grap_joint]
         # raise 抬起
-        joints_up = [joints_down[0], 80, 50, 50, 265, 30]
+        #joints_up = [joints_down[0], 80, 50, 50, 265, 30]
         # put up 架起
         self.arm.Arm_serial_servo_write6_array(joints_uu, 1500)
         sleep(1.5)
@@ -47,18 +48,38 @@ class identify_grap:
         # put up 架起
         self.arm.Arm_serial_servo_write6_array(joints_uu, 1000)
         sleep(1)
-        # Lift to above the corresponding position 抬起至对应位置上方
-        self.arm.Arm_serial_servo_write(1, joints_down[0], 500)
-        sleep(0.5)
-        # Move to target location 移动至目标位置
+        self.holding = 1
+
+        # #put down
+        # self.arm.Arm_serial_servo_write6_array(joints_down, 1000)
+        # sleep(1)
+
+        # # Lift to above the corresponding position 抬起至对应位置上方
+        # self.arm.Arm_serial_servo_write(1, joints_down[0], 500)
+        # sleep(0.5)
+        # # Move to target location 移动至目标位置
+        # self.arm.Arm_serial_servo_write6_array(joints_down, 1000)
+        # sleep(1)
+        
+        # Release the object and release the clamping jaws释放物体,松开夹爪
+        # self.arm.Arm_serial_servo_write(6, 30, 500)
+        # sleep(0.5)
+        # # raise  抬起
+        # self.arm.Arm_serial_servo_write6_array(joints_uu, 1000)
+        # sleep(1)
+        
+    def putdown(self, joints_down):
+        joints_uu = [90, 80, 50, 50, 265, self.grap_joint]
+        #put down
         self.arm.Arm_serial_servo_write6_array(joints_down, 1000)
         sleep(1)
         # Release the object and release the clamping jaws释放物体,松开夹爪
         self.arm.Arm_serial_servo_write(6, 30, 500)
         sleep(0.5)
         # raise  抬起
-        self.arm.Arm_serial_servo_write6_array(joints_up, 1000)
+        self.arm.Arm_serial_servo_write6_array(joints_uu, 1000)
         sleep(1)
+        self.holding = 0
 
     def identify_move(self, joints):
         '''
@@ -68,10 +89,18 @@ class identify_grap:
         '''
         if self.move_status == True:
             self.move_status = False
-            joints = [joints[0], joints[1], joints[2], joints[3], 265, 30]
-            joints_down = [45, 50, 20, 60, 265, self.grap_joint]
-            self.move(joints, joints_down)
+            #joints_down = [45, 50, 20, 60, 265, self.grap_joint]
+            if not self.holding:
+                joints = [joints[0], joints[1], joints[2], joints[3], 265, 30]
+                self.pickup(joints)
+            else:
+                joints = [joints[0], joints[1], joints[2], joints[3], 265, self.grap_joint]
+                self.putdown(joints)
+                
             self.move_status = True
+            return self.holding
+            
+        return -1
             
 #         if name == "red" and self.move_status == True:
 #             # It is set here. You can only run down after this operation
