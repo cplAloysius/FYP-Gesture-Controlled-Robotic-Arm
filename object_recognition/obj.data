@@ -1,0 +1,5 @@
+classes = 20
+train = C:\Users\diamo\Desktop\nn\train.txt
+valid = C:\Users\diamo\Desktop\nn\train.txt
+names = C:\Users\diamo\Desktop\nn\obj.names
+backup = C:\Users\diamo\Desktop\nn\model
