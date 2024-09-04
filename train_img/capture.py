@@ -12,7 +12,7 @@ while count < maxFrames:
     img2 = cv2.putText(img2, str(count), (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0))
     cv2.imshow("test window", img2)
     if cv2.waitKey(1) & 0xFF == ord(' '):
-    	cv2.imwrite("/home/pi/train_img/img/stickers3_%d.jpg" %count, img)
+    	cv2.imwrite("/home/pi/FYP-Gesture-Controlled-Robotic-Arm/train_img/extra imgs/nightcolours_%d.jpg" %count, img)
     	count += 1
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
