@@ -13,6 +13,12 @@ import smbus
 import time
 from Arm_Lib import Arm_Device
 
+import cv2 as cv
+from cvlib.object_detection import YOLO
+
+import threading
+import signal
+
 Arm = Arm_Device()
 time.sleep(.1)
 
@@ -164,7 +170,7 @@ async def uart_terminal():
         nus = client.services.get_service(UART_SERVICE_UUID)
         rx_char = nus.get_characteristic(UART_RX_CHAR_UUID)
 
-        while True:
+        while not exit_flag:
             # This waits until you type a line and press ENTER.
             # A real terminal program might put stdin in raw mode so that things
             # like CTRL+C get passed to the remote device.
@@ -187,10 +193,55 @@ async def uart_terminal():
 
             print("sent:", data)
 
+capture = None
+exit_flag = False
+
+def handle_sigint(signal_number, frame):
+    print("exiting...")
+    global exit_flag
+    exit_flag = True
+    
+    if capture is not None:
+        capture.release()
+    cv.destroyAllWindows()
+    
+    sys.exit(0)
+
+def camera():
+    global capture
+    yolo = YOLO('yolov4-tiny-custom_best.weights', 'yolov4-tiny-test.cfg', 'obj.names')
+    capture = cv.VideoCapture(0)
+    
+    while not exit_flag:
+        ret, frame = capture.read()
+        if not ret:
+            break
+        
+        bbox, label, conf = yolo.detect_objects(frame)
+        yolo.draw_bbox(frame, bbox, label, conf, write_conf=True)
+        
+        cv.imshow('video', frame)
+        
+        if cv.waitKey(1) & 0xFF == ord('q'):
+            break
+    
+    if capture:
+        capture.release()
+    cv.destroyAllWindows()
 
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, handle_sigint)
+    
     try:
+        camera_thread = threading.Thread(target=camera)
+        camera_thread.start()
         asyncio.run(uart_terminal())
     except asyncio.CancelledError:
         # task is cancelled on disconnect, so we ignore this error
         pass
+    
+    finally:
+        if capture is not None:
+            capture.release()
+        cv.destroyAllWindows()
+        camera_thread.join()
