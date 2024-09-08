@@ -164,6 +164,9 @@ async def uart_terminal():
     async with BleakClient(device, disconnected_callback=handle_disconnect) as client:
         await client.start_notify(UART_TX_CHAR_UUID, handle_rx)
 
+        camera_thread = threading.Thread(target=camera)
+        camera_thread.start()
+
         print("Connected, start typing and press ENTER...")
 
         loop = asyncio.get_running_loop()
@@ -195,6 +198,7 @@ async def uart_terminal():
 
 capture = None
 exit_flag = False
+camera_thread = None
 
 def handle_sigint(signal_number, frame):
     print("exiting...")
@@ -233,8 +237,6 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_sigint)
     
     try:
-        camera_thread = threading.Thread(target=camera)
-        camera_thread.start()
         asyncio.run(uart_terminal())
     except asyncio.CancelledError:
         # task is cancelled on disconnect, so we ignore this error
@@ -244,4 +246,5 @@ if __name__ == "__main__":
         if capture is not None:
             capture.release()
         cv.destroyAllWindows()
-        camera_thread.join()
+        if camera_thread is not None:
+            camera_thread.join()
