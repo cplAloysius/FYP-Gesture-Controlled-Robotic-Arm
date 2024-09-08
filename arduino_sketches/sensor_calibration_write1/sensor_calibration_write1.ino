@@ -46,9 +46,9 @@ void setup() {
   cal.mag_field = 87.8; // approximate value for locations along the equator
 
   // in Radians/s
-  cal.gyro_zerorate[0] = 0.0867;
-  cal.gyro_zerorate[1] = -0.0941;
-  cal.gyro_zerorate[2] = -0.0654;
+  cal.gyro_zerorate[0] = 0.0861;
+  cal.gyro_zerorate[1] = -0.0959;
+  cal.gyro_zerorate[2] = -0.0678;
 
   cal.accel_zerog[0] = 0;
   cal.accel_zerog[1] = 0;
