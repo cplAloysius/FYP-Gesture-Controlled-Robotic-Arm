@@ -1,3 +1,4 @@
 .DS_Store
 redis_pw.txt
+redis.conf
 __pycache__/
