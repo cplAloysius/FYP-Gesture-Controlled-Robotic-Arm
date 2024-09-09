@@ -5,8 +5,7 @@ import cv2
 if __name__ == "__main__":
 
     host = '127.0.0.1'
-    pw = input('Redis password: ')
-    src = ImageTransferService.ImageTransferService(host, pw)
+    src = ImageTransferService.ImageTransferService(host)
 
     print(src.ping())
 

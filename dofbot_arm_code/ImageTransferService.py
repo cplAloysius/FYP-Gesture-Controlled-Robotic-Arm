@@ -2,18 +2,14 @@ import redis
 import cv2
 import numpy as np
 
-file = open('redis_pw.txt', 'r')
-pw = file.read()
-file.close()
-
 class ImageTransferService:
     def __init__(self, host='localhost', port=6379):
         self.port = port
         self.host = host
         file = open('redis_pw.txt', 'r')
-        self.pw = file.read()
+        self.pw = ((file.read()).split())[0]
         file.close()
-        self.conn = redis.Redis(host,port, password=pw)
+        self.conn = redis.Redis(host,port, password=self.pw)
         self.frameNum = 0
 
     def ping(self):
