@@ -2,11 +2,17 @@ import redis
 import cv2
 import numpy as np
 
+file = open('redis_pw.txt', 'r')
+pw = file.read()
+file.close()
+
 class ImageTransferService:
-    def __init__(self, host='localhost', pw='', port=6379):
+    def __init__(self, host='localhost', port=6379):
         self.port = port
         self.host = host
-        self.pw = pw
+        file = open('redis_pw.txt', 'r')
+        self.pw = file.read()
+        file.close()
         self.conn = redis.Redis(host,port, password=pw)
         self.frameNum = 0
 

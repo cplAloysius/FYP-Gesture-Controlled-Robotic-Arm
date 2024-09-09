@@ -18,6 +18,9 @@ from cvlib.object_detection import YOLO
 
 import threading
 import signal
+import ImageTransferService
+
+
 
 Arm = Arm_Device()
 time.sleep(.1)
@@ -75,6 +78,8 @@ async def uart_terminal():
         # cancelling all tasks effectively ends the program
         for task in asyncio.all_tasks():
             task.cancel()
+        global exit_flag
+        exit_flag = True
 
     def handle_rx(_: BleakGATTCharacteristic, data: bytearray):
         print("received:", data)
@@ -164,8 +169,11 @@ async def uart_terminal():
     async with BleakClient(device, disconnected_callback=handle_disconnect) as client:
         await client.start_notify(UART_TX_CHAR_UUID, handle_rx)
 
-        camera_thread = threading.Thread(target=camera)
-        camera_thread.start()
+        capture_thread = threading.Thread(target=capture_frames)
+        process_thread = threading.Thread(target=process_frames)
+
+        capture_thread.start()
+        process_thread.start()
 
         print("Connected, start typing and press ENTER...")
 
@@ -199,11 +207,16 @@ async def uart_terminal():
 capture = None
 exit_flag = False
 camera_thread = None
+capture_thread = None
+process_thread = None
 frame = None
 lock = threading.Lock()
 
+host = '192.168.18.211'
+RemoteDisplay = ImageTransferService.ImageTransferService(host)
+
 def handle_sigint(signal_number, frame):
-    print("exiting...")
+    print("Exiting...")
     global exit_flag
     exit_flag = True
     
@@ -223,9 +236,6 @@ def count_fps(start_time, fps_total, frame_count):
     return cur_time, fps_total, frame_count, avg_fps
     
 def capture_frames():
-    start_time = time.time()
-    frame_count = 0
-    fps_total = 0
     global capture, frame
     capture = cv.VideoCapture(0)
     
@@ -237,6 +247,9 @@ def capture_frames():
             frame = new_frame 
 
 def process_frames():
+    start_time = time.time()
+    fps_total = 0
+    frame_count = 0
     global frame
     yolo = YOLO('yolov4-tiny-custom_best.weights', 'yolov4-tiny-test.cfg', 'obj.names')
     while not exit_flag:
@@ -244,17 +257,18 @@ def process_frames():
             with lock:
                 current_frame = frame.copy()
                 
-            bbox, label, conf = yolo.detect_objects(frame)
-            yolo.draw_bbox(frame, bbox, label, conf, write_conf=True)
+            bbox, label, conf = yolo.detect_objects(current_frame)
+            yolo.draw_bbox(current_frame, bbox, label, conf, write_conf=True)
             
             start_time, fps_total, frame_count, avg_fps = count_fps(start_time, fps_total, frame_count)
             fps_text = "FPS: {:.2f}".format(avg_fps)
-            cv.putText(frame, fps_text, (30, 430), cv.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,0,255), 1)
+            cv.putText(current_frame, fps_text, (30, 430), cv.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,0,255), 1)
 
-            cv.imshow('video', frame)
+            RemoteDisplay.sendImage(current_frame)
+            #cv.imshow('video', current_frame)
         
-            if cv.waitKey(1) & 0xFF == ord('q'):
-                break
+            #if cv.waitKey(1) & 0xFF == ord('q'):
+                #break
     if capture:
         capture.release()
     cv.destroyAllWindows()
@@ -303,5 +317,7 @@ if __name__ == "__main__":
         if capture is not None:
             capture.release()
         cv.destroyAllWindows()
-        if camera_thread is not None:
-            camera_thread.join()
+        if capture_thread is not None:
+            capture_thread.join()
+        if process_thread is not None:
+            process_thread.join()
