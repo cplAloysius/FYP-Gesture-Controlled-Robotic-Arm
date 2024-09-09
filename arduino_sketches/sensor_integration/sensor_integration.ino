@@ -479,7 +479,7 @@ void init_motion(void)
   init_sensors();
 
   setup_sensors();
-  calibrateGyro();
+  //calibrateGyro();
   filter.begin(FILTER_UPDATE_RATE_HZ);
   timestamp = millis();
 
@@ -523,13 +523,11 @@ void loop_motion(void)
     accel_y = ax * correction_matrix[3] + ay * correction_matrix[4] + az * correction_matrix[5];
     accel_z = ax * correction_matrix[6] + ay * correction_matrix[7] + az * correction_matrix[8];
 
-    gyro_xcal = gyro.gyro.x - gyro_offset[0];
-    gyro_ycal = gyro.gyro.y - gyro_offset[1];
-    gyro_zcal = gyro.gyro.z - gyro_offset[2];
+    cal.calibrate(gyro);
 
-    gyro_x = gyro_xcal * SENSORS_RADS_TO_DPS;
-    gyro_y = gyro_ycal * SENSORS_RADS_TO_DPS;
-    gyro_z = gyro_zcal * SENSORS_RADS_TO_DPS;
+    gyro_x = gyro.gyro.x * SENSORS_RADS_TO_DPS;
+    gyro_y = gyro.gyro.y * SENSORS_RADS_TO_DPS;
+    gyro_z = gyro.gyro.z * SENSORS_RADS_TO_DPS;
 
     cal.calibrate(mag);
 
@@ -540,9 +538,9 @@ void loop_motion(void)
     axBuffer.push_back(accel_x);
     ayBuffer.push_back(accel_y);
     azBuffer.push_back(accel_z);
-    gxBuffer.push_back(gyro_xcal);
-    gyBuffer.push_back(gyro_ycal);
-    gzBuffer.push_back(gyro_zcal);
+    gxBuffer.push_back(gyro.gyro.x);
+    gyBuffer.push_back(gyro.gyro.y);
+    gzBuffer.push_back(gyro.gyro.z);
 
     if (axBuffer.size() > bufferSize) {
       for (int i=0; i<overlap; i++) {
