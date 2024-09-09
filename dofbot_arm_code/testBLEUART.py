@@ -210,7 +210,8 @@ process_thread = None
 frame = None
 lock = threading.Lock()
 
-host = '192.168.18.211'
+#host = '192.168.18.211'
+host = '192.168.11.17'
 RemoteDisplay = ImageTransferService.ImageTransferService(host)
 
 def handle_sigint(signal_number, frame):
