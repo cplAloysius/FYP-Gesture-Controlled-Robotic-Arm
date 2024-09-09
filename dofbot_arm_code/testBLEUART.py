@@ -20,8 +20,6 @@ import threading
 import signal
 import ImageTransferService
 
-
-
 Arm = Arm_Device()
 time.sleep(.1)
 

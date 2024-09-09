@@ -1,2 +1,3 @@
 .DS_Store
 redis_pw.txt
+__pycache__/
