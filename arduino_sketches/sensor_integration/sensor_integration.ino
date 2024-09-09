@@ -156,10 +156,6 @@ namespace std {
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  while (!Serial) {
-
-    delay(1);
-  }
 
   pinMode(usrBtn, INPUT_PULLUP);
   
