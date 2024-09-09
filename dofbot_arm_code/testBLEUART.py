@@ -199,6 +199,8 @@ async def uart_terminal():
 capture = None
 exit_flag = False
 camera_thread = None
+frame = None
+lock = threading.Lock()
 
 def handle_sigint(signal_number, frame):
     print("exiting...")
@@ -211,14 +213,51 @@ def handle_sigint(signal_number, frame):
     
     sys.exit(0)
 
-def count_fps(start_time, cur_time, fps_total, frame_count):
+def count_fps(start_time, fps_total, frame_count):
+    cur_time = time.time()
     elapsed = cur_time - start_time
-    start_time = cur_time
     fps = 1/elapsed
     fps_total += fps
     frame_count += 1
     avg_fps = fps_total/frame_count
-    return start_time, fps_total, frame_count, avg_fps
+    return cur_time, fps_total, frame_count, avg_fps
+    
+def capture_frames():
+    start_time = time.time()
+    frame_count = 0
+    fps_total = 0
+    global capture, frame
+    capture = cv.VideoCapture(0)
+    
+    while not exit_flag:
+        ret, new_frame = capture.read()
+        if not ret:
+            break
+        with lock:
+            frame = new_frame 
+
+def process_frames():
+    global frame
+    yolo = YOLO('yolov4-tiny-custom_best.weights', 'yolov4-tiny-test.cfg', 'obj.names')
+    while not exit_flag:
+        if frame is not None:
+            with lock:
+                current_frame = frame.copy()
+                
+            bbox, label, conf = yolo.detect_objects(frame)
+            yolo.draw_bbox(frame, bbox, label, conf, write_conf=True)
+            
+            start_time, fps_total, frame_count, avg_fps = count_fps(start_time, fps_total, frame_count)
+            fps_text = "FPS: {:.2f}".format(avg_fps)
+            cv.putText(frame, fps_text, (30, 430), cv.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,0,255), 1)
+
+            cv.imshow('video', frame)
+        
+            if cv.waitKey(1) & 0xFF == ord('q'):
+                break
+    if capture:
+        capture.release()
+    cv.destroyAllWindows()
 
 def camera():
     start_time = time.time()
@@ -238,8 +277,7 @@ def camera():
         bbox, label, conf = yolo.detect_objects(frame)
         yolo.draw_bbox(frame, bbox, label, conf, write_conf=True)
 
-        cur_time = time.time()
-        start_time, fps_total, frame_count, avg_fps = count_fps(start_time, cur_time, fps_total, frame_count)
+        start_time, fps_total, frame_count, avg_fps = count_fps(start_time, fps_total, frame_count)
         fps_text = "FPS: {:.2f}".format(avg_fps)
         cv.putText(frame, fps_text, (30, 430), cv.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,0,255), 1)
 
