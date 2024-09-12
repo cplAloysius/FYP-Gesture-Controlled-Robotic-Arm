@@ -43,7 +43,7 @@ BLEClientUart clientUart;
 #define PRINT_EVERY_N_UPDATES 10
 
 uint32_t timestamp;
-uint32_t fistTimer = 0;
+//uint32_t fistTimer = 0;
 
 float magnetic_x, magnetic_y, magnetic_z;
 float accel_x, accel_y, accel_z;
@@ -61,6 +61,11 @@ const float correction_matrix[9] = {1.02248, 0.00633, -0.00331,
 
 const int usrBtn = 7;
 int btnState = 0;
+bool btnActive = false;
+bool longPressActive = false;
+long btnTimer = 0;
+long longPressTime = 500;
+long extraLongPressTime = 2000;
 
 const int numSamples = 104;
 const int overlap = 20;
@@ -330,7 +335,6 @@ void loop() {
   // else {
   //   fist = 0;
   // }
-  
 }
 
 void prph_connect_callback(uint16_t conn_handle)
@@ -646,18 +650,62 @@ int fistGesture()
   return 0;
 }
 
-void sendBLEData(void)
+void button_press()
 {
-  btnState = digitalRead(usrBtn);
-
-  if (btnState == LOW) {
-    pixel.setPixelColor(0, 200, 0, 100);   //  Set pixel 0 to (r,g,b) color value
-    pixel.show();
+  int action = 0;
+  if (digitalRead(usrBtn) == LOW) {
+    if (btnActive == false) {
+      btnActive = true;
+      btnTimer = millis();
+    }
+    if ((millis() - btnTimer > extraLongPressTime) && (longPressActive == false)) {
+      longPressActive = true;
+      //extra long press action
+      action = 3;
+      Serial.println("extra long press");
+    }
   }
   else {
-    pixel.clear();   //  Set pixel 0 to (r,g,b) color value
-    pixel.show();
+    if (btnActive == true) {
+      if (longPressActive == true) {
+        longPressActive = false;
+      }
+      else {
+        if (millis() - btnTimer > longPressTime) {
+          //long press action
+          action = 2;
+          Serial.println("long press");
+        }
+        else {
+          //short press action
+          action = 1;
+          Serial.println("short press");
+        }
+      }
+      btnActive = false;
+    }
   }
+  if (btnState) {
+    btnState = 0;
+  }
+  else {
+    btnState = action;
+  }
+}
+
+void sendBLEData(void)
+{
+  button_press();
+  // btnState = digitalRead(usrBtn);
+
+  // if (btnState == LOW) {
+  //   pixel.setPixelColor(0, 200, 0, 100);   //  Set pixel 0 to (r,g,b) color value
+  //   pixel.show();
+  // }
+  // else {
+  //   pixel.clear();   //  Set pixel 0 to (r,g,b) color value
+  //   pixel.show();
+  // }
 
   static uint32_t ii=0, xx=10;
   char str[26];
