@@ -23,9 +23,12 @@ import ImageTransferService
 Arm = Arm_Device()
 time.sleep(.1)
 
-Arm.Arm_serial_servo_write6(90, 90, 0, 90, 90, 0, 500)
+Arm.Arm_serial_servo_write6(90, 90, 0, 90, 90, 0, 1000)
 offset = -99999
-claw_state = 0
+grabbing = 0
+toggle = 0
+hold_position = 0
+last_heading = 0
 
 time.sleep(1)
 
@@ -80,6 +83,7 @@ async def uart_terminal():
         exit_flag = True
 
     def handle_rx(_: BleakGATTCharacteristic, data: bytearray):
+        global grabbing, offset, toggle, hold_position, last_heading
         print("received:", data)
         data = data.decode('utf-8')
         data = data.split(",")
@@ -87,18 +91,22 @@ async def uart_terminal():
         roll = float(data[0])
         pitch = float(data[1])
         heading = float(data[2])
-        claw = float(data[3])
-        rstOffset = float(data[4])
+        grab = float(data[3])
+        btn = float(data[4])
+        
+        # if (grab == 69):
+        #     if (grabbing == 0):
+        #         grabbing = 1
+        #     else:
+        #         grabbing = 0
+        if (btn == 1):
+            toggle = 1
 
-        global claw_state
-        if (claw == 69):
-            if (claw_state == 0):
-                claw_state = 180
-            else:
-                claw_state = 0
+        elif (btn == 2):
+            Arm.Arm_serial_servo_write6(last_heading, 135, 0, 0, 90, 0, 1000)
+            hold_position = not hold_position
 
-        global offset
-        if (rstOffset == 0):
+        elif (btn == 3):
             offset = -99999
         if (offset == -99999):
             offset = 90 - heading
@@ -115,54 +123,25 @@ async def uart_terminal():
         if (roll < -90):
                 roll = -90
         if (roll > 90):
-                roll = 90;
-        
-        #if (roll+90 > 0):
-            #Arm.Arm_serial_servo_write(5, roll+90, 500)
-            
-        #pitch above 90 degrees, bend servo 3 only    
-        if (pitch <= 0):
-            Arm.Arm_serial_servo_write6(heading, 90, abs(pitch), 90, roll+90, claw_state, 500)
-            #Arm.Arm_serial_servo_write(3, abs(pitch), 500)
-            #Arm.Arm_serial_servo_write(4, 90, 500)
-            #Arm.Arm_serial_servo_write(2, 90, 500)
-            
-        #pitch below 90 degrees, bend servo 2 and 4, servo 3 stays at 90 degrees
-        
-        if (pitch > 0):
-            ang2 = pitch + 90
-            ang4 = 75 - pitch
-            if (ang2 > 120):
-                ang2 = 120
-            if (ang4 < 0):
-                ang4 = 0
-                ang2 = interp(pitch, [75, 90], [120, 90])
-            
-            Arm.Arm_serial_servo_write6(heading, ang2, 0, ang4, roll+90, claw_state, 500)
-        '''
-            if (pitch >= 70):
-                ang = 90-pitch*1.3
-                if (ang < 0): 
-                    ang = 0
-                Arm.Arm_serial_servo_write(4, ang, 500)
-                Arm.Arm_serial_servo_write(2, interp(pitch, [70,90],[118,90]), 500)
-        
-            if (pitch < 70):
-                Arm.Arm_serial_servo_write(4, 90-pitch*1.3, 500)
-                Arm.Arm_serial_servo_write(2, 90+pitch/2.5, 500)
-        '''
-        #if (heading < 180):
-         #   Arm.Arm_serial_servo_write(1, heading, 500)
-            
-        #cmd = data.decode('utf-8')
-        #if (cmd == '+'):
-        #   print("open")
-        #    Arm.Arm_serial_servo_write(arm_id, 50, 500)
-        #    time.sleep(1)
-        #elif (cmd == '-'):
-        #    print("close")
-        #    Arm.Arm_serial_servo_write(arm_id, 120, 500)
-        #    time.sleep(1)
+                roll = 90
+
+        if (hold_position == 0):
+            last_heading = heading
+            #pitch above 90 degrees, bend servo 3 only    
+            if (pitch <= 0):
+                Arm.Arm_serial_servo_write6(heading, 90, abs(pitch), 90, roll+90, 0, 500)
+                
+            #pitch below 90 degrees, bend servo 2 and 4, servo 3 stays at 90 degrees
+            if (pitch > 0):
+                ang2 = pitch + 90
+                ang4 = 75 - pitch
+                if (ang2 > 120):
+                    ang2 = 120
+                if (ang4 < 0):
+                    ang4 = 0
+                    ang2 = interp(pitch, [75, 90], [120, 90])
+                
+                Arm.Arm_serial_servo_write6(heading, ang2, 0, ang4, roll+90, 0, 500)
 
     async with BleakClient(device, disconnected_callback=handle_disconnect) as client:
         await client.start_notify(UART_TX_CHAR_UUID, handle_rx)
@@ -210,8 +189,8 @@ process_thread = None
 frame = None
 lock = threading.Lock()
 
-#host = '192.168.18.211'
-host = '192.168.11.17'
+host = '192.168.18.211'
+#host = '192.168.11.17'
 RemoteDisplay = ImageTransferService.ImageTransferService(host)
 
 def handle_sigint(signal_number, frame):
@@ -249,7 +228,10 @@ def process_frames():
     start_time = time.time()
     fps_total = 0
     frame_count = 0
-    global frame
+    current_objects = []
+    target_obj = ''
+    obj_index = 0
+    global frame, toggle
     yolo = YOLO('yolov4-tiny-custom_best.weights', 'yolov4-tiny-test.cfg', 'obj.names')
     while not exit_flag:
         if frame is not None:
@@ -258,6 +240,34 @@ def process_frames():
                 
             bbox, label, conf = yolo.detect_objects(current_frame)
             yolo.draw_bbox(current_frame, bbox, label, conf, write_conf=True)
+
+            if hold_position:
+                for x in label:
+                    if x not in current_objects:
+                        current_objects.append(x)
+                if current_objects:
+                    if (toggle == 1):
+                        obj_index = (obj_index + 1) % len(current_objects)
+                        target_obj = current_objects[obj_index]
+                        i = 0
+                        while (current_objects[obj_index] not in label):
+                            obj_index = (obj_index + 1) % len(current_objects)
+                            target_obj = current_objects[obj_index]
+                            i+=1
+                            if i>=len(current_objects):
+                                target_obj = ''
+                                break
+
+                        print("switch target")
+                        toggle = 0
+                    
+                    targ_txt = "Target: {}".format(target_obj)
+                    cv.putText(current_frame, targ_txt, (30, 30), cv.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,0,255), 1)
+            else:
+                current_objects.clear()
+                
+            print(obj_index, len(current_objects))
+            print(current_objects)
             
             start_time, fps_total, frame_count, avg_fps = count_fps(start_time, fps_total, frame_count)
             fps_text = "FPS: {:.2f}".format(avg_fps)
@@ -272,36 +282,36 @@ def process_frames():
         capture.release()
     cv.destroyAllWindows()
 
-def camera():
-    start_time = time.time()
-    frame_count = 0
-    fps_total = 0
+# def camera():
+#     start_time = time.time()
+#     frame_count = 0
+#     fps_total = 0
 
-    yolo = YOLO('yolov4-tiny-custom_best.weights', 'yolov4-tiny-test.cfg', 'obj.names')
+#     yolo = YOLO('yolov4-tiny-custom_best.weights', 'yolov4-tiny-test.cfg', 'obj.names')
     
-    global capture
-    capture = cv.VideoCapture(0)
+#     global capture
+#     capture = cv.VideoCapture(0)
     
-    while not exit_flag:
-        ret, frame = capture.read()
-        if not ret:
-            break
+#     while not exit_flag:
+#         ret, frame = capture.read()
+#         if not ret:
+#             break
         
-        bbox, label, conf = yolo.detect_objects(frame)
-        yolo.draw_bbox(frame, bbox, label, conf, write_conf=True)
+#         bbox, label, conf = yolo.detect_objects(frame)
+#         yolo.draw_bbox(frame, bbox, label, conf, write_conf=True)
 
-        start_time, fps_total, frame_count, avg_fps = count_fps(start_time, fps_total, frame_count)
-        fps_text = "FPS: {:.2f}".format(avg_fps)
-        cv.putText(frame, fps_text, (30, 430), cv.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,0,255), 1)
+#         start_time, fps_total, frame_count, avg_fps = count_fps(start_time, fps_total, frame_count)
+#         fps_text = "FPS: {:.2f}".format(avg_fps)
+#         cv.putText(frame, fps_text, (30, 430), cv.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,0,255), 1)
 
-        cv.imshow('video', frame)
+#         cv.imshow('video', frame)
         
-        if cv.waitKey(1) & 0xFF == ord('q'):
-            break
+#         if cv.waitKey(1) & 0xFF == ord('q'):
+#             break
     
-    if capture:
-        capture.release()
-    cv.destroyAllWindows()
+#     if capture:
+#         capture.release()
+#     cv.destroyAllWindows()
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_sigint)
