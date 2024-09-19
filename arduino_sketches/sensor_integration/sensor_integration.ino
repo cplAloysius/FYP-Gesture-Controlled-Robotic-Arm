@@ -59,14 +59,6 @@ const float correction_matrix[9] = {1.02248, 0.00633, -0.00331,
                                   0.00633, 1.01480, 0.00440, 
                                   -0.00331, 0.00440, 1.01081};
 
-const int usrBtn = 7;
-int btnState = 0;
-bool btnActive = false;
-bool longPressActive = false;
-long btnTimer = 0;
-long longPressTime = 500;
-long extraLongPressTime = 2000;
-
 const int numSamples = 104;
 const int overlap = 20;
 const int bufferSize = numSamples;
@@ -161,8 +153,6 @@ namespace std {
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(115200);
-
-  pinMode(usrBtn, INPUT_PULLUP);
   
   pixel.begin();
   pixel.setBrightness(20);
@@ -221,7 +211,7 @@ void setup() {
   }
   init_motion();
 
-    tflOpsResolver.AddConv2D();
+  tflOpsResolver.AddConv2D();
   tflOpsResolver.AddMaxPool2D();
   tflOpsResolver.AddReshape();
   tflOpsResolver.AddFullyConnected();
@@ -650,67 +640,12 @@ int fistGesture()
   return 0;
 }
 
-void button_press()
-{
-  int action = 0;
-  if (digitalRead(usrBtn) == LOW) {
-    if (btnActive == false) {
-      btnActive = true;
-      btnTimer = millis();
-    }
-    if ((millis() - btnTimer > extraLongPressTime) && (longPressActive == false)) {
-      longPressActive = true;
-      //extra long press action
-      action = 3;
-      Serial.println("extra long press");
-    }
-  }
-  else {
-    if (btnActive == true) {
-      if (longPressActive == true) {
-        longPressActive = false;
-      }
-      else {
-        if (millis() - btnTimer > longPressTime) {
-          //long press action
-          action = 2;
-          Serial.println("long press");
-        }
-        else {
-          //short press action
-          action = 1;
-          Serial.println("short press");
-        }
-      }
-      btnActive = false;
-    }
-  }
-  if (btnState) {
-    btnState = 0;
-  }
-  else {
-    btnState = action;
-  }
-}
-
 void sendBLEData(void)
 {
-  button_press();
-  // btnState = digitalRead(usrBtn);
-
-  // if (btnState == LOW) {
-  //   pixel.setPixelColor(0, 200, 0, 100);   //  Set pixel 0 to (r,g,b) color value
-  //   pixel.show();
-  // }
-  // else {
-  //   pixel.clear();   //  Set pixel 0 to (r,g,b) color value
-  //   pixel.show();
-  // }
-
   static uint32_t ii=0, xx=10;
   char str[26];
   
-  sprintf(str, "%d, %d, %d, %d, %d", int(roll), int(pitch), int(heading), fist2, btnState);
+  sprintf(str, "%d, %d, %d, %d, %d", int(roll), int(pitch), int(heading), fist2);
   Serial.println(str);
   bleuart.print(str);
   //delay(xx);
