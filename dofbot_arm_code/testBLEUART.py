@@ -20,6 +20,10 @@ import threading
 import signal
 import ImageTransferService
 
+from identify_target import identify_GetTarget
+
+arm_service = identify_GetTarget()
+
 Arm = Arm_Device()
 time.sleep(.1)
 
@@ -29,6 +33,20 @@ grabbing = 0
 toggle = 0
 hold_position = 0
 last_heading = 0
+
+
+capture = None
+exit_flag = False
+camera_thread = None
+capture_thread = None
+process_thread = None
+frame = None
+lock = threading.Lock()
+holding_block = 0
+
+host = '192.168.18.211'
+#host = '192.168.11.17'
+RemoteDisplay = ImageTransferService.ImageTransferService(host)
 
 time.sleep(1)
 
@@ -91,18 +109,13 @@ async def uart_terminal():
         roll = float(data[0])
         pitch = float(data[1])
         heading = float(data[2])
-        grab = float(data[3])
+        claw = float(data[3])
         btn = float(data[4])
         
-        # if (grab == 69):
-        #     if (grabbing == 0):
-        #         grabbing = 1
-        #     else:
-        #         grabbing = 0
         if (btn == 1):
             toggle = 1
 
-        elif (btn == 2):
+        elif (btn == 2 and not holding_block):
             Arm.Arm_serial_servo_write6(last_heading, 135, 0, 0, 90, 0, 1000)
             hold_position = not hold_position
 
@@ -110,6 +123,9 @@ async def uart_terminal():
             offset = -99999
         if (offset == -99999):
             offset = 90 - heading
+
+        if hold_position and claw == 69:
+            grabbing = 1
         
         offset_heading = get_offset(heading, offset)
         heading = offset_heading
@@ -142,6 +158,9 @@ async def uart_terminal():
                     ang2 = interp(pitch, [75, 90], [120, 90])
                 
                 Arm.Arm_serial_servo_write6(heading, ang2, 0, ang4, roll+90, 0, 500)
+        
+        if holding_block and not grabbing:
+            Arm.Arm_serial_servo_write(1, heading, 500)
 
     async with BleakClient(device, disconnected_callback=handle_disconnect) as client:
         await client.start_notify(UART_TX_CHAR_UUID, handle_rx)
@@ -181,20 +200,8 @@ async def uart_terminal():
 
             print("sent:", data)
 
-capture = None
-exit_flag = False
-camera_thread = None
-capture_thread = None
-process_thread = None
-frame = None
-lock = threading.Lock()
-
-host = '192.168.18.211'
-#host = '192.168.11.17'
-RemoteDisplay = ImageTransferService.ImageTransferService(host)
-
 def handle_sigint(signal_number, frame):
-    print("Exiting...")
+    print(" Exiting...")
     global exit_flag
     exit_flag = True
     
@@ -231,17 +238,30 @@ def process_frames():
     current_objects = []
     target_obj = ''
     obj_index = 0
-    global frame, toggle
+    cntr = None
+    global frame, toggle, grabbing, holding_block, hold_position, last_heading
     yolo = YOLO('yolov4-tiny-custom_best.weights', 'yolov4-tiny-test.cfg', 'obj.names')
     while not exit_flag:
         if frame is not None:
             with lock:
                 current_frame = frame.copy()
-                
+
             bbox, label, conf = yolo.detect_objects(current_frame)
             yolo.draw_bbox(current_frame, bbox, label, conf, write_conf=True)
 
-            if hold_position:
+            if holding_block:
+                if grabbing:
+                    cntr = None
+                    last_heading  = Arm.Arm_serial_servo_read(1)
+                    arm_service.xy = [last_heading, 135]
+                    threading.Thread(target=arm_service.target_run, args=(cntr,)).start()
+                    if arm_service.move_status:
+                        time.sleep(4)
+                    grabbing = 0
+                    hold_position = 0
+                    holding_block = 0
+
+            elif hold_position and not holding_block:
                 for x in label:
                     if x not in current_objects:
                         current_objects.append(x)
@@ -257,17 +277,32 @@ def process_frames():
                             if i>=len(current_objects):
                                 target_obj = ''
                                 break
-
-                        print("switch target")
                         toggle = 0
                     
                     targ_txt = "Target: {}".format(target_obj)
                     cv.putText(current_frame, targ_txt, (30, 30), cv.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,0,255), 1)
+
+                    if grabbing:
+                        if target_obj in label:
+                            i = label.index(target_obj)
+                            centre = (int((bbox[i][0] + bbox[i][2])/2), int((bbox[i][1] + bbox[i][3])/2))
+                            scale_x, scale_y = scaling(centre[0], centre[1])
+                            cntr = (round((((centre[0]*scale_x) - 320) / 4000), 5), round(((480 - (centre[1]*scale_y)) / 3000) * 0.8+0.19, 5))
+                        else:
+                            cntr = None
+
+                        last_heading  = Arm.Arm_serial_servo_read(1)
+                        arm_service.xy = [last_heading, 135]
+                        threading.Thread(target=arm_service.target_run, args=(cntr,)).start()
+                        if arm_service.move_status:
+                            time.sleep(6)
+                            if not arm_service.exceed_angle:
+                                holding_block = 1
+                            else:
+                                arm_service.exceed_angle = 0
+                        grabbing = 0
             else:
                 current_objects.clear()
-                
-            print(obj_index, len(current_objects))
-            print(current_objects)
             
             start_time, fps_total, frame_count, avg_fps = count_fps(start_time, fps_total, frame_count)
             fps_text = "FPS: {:.2f}".format(avg_fps)
@@ -282,36 +317,18 @@ def process_frames():
         capture.release()
     cv.destroyAllWindows()
 
-# def camera():
-#     start_time = time.time()
-#     frame_count = 0
-#     fps_total = 0
+def scaling(x, y):
+    scale_x = 1
+    scale_y = 1
+    if y<240:
+        scale_y = y/240
+    if x<320:
+        scale_x = x/320
+    elif x>320:
+        scale_x = (x-320)/3200 + 1
 
-#     yolo = YOLO('yolov4-tiny-custom_best.weights', 'yolov4-tiny-test.cfg', 'obj.names')
-    
-#     global capture
-#     capture = cv.VideoCapture(0)
-    
-#     while not exit_flag:
-#         ret, frame = capture.read()
-#         if not ret:
-#             break
-        
-#         bbox, label, conf = yolo.detect_objects(frame)
-#         yolo.draw_bbox(frame, bbox, label, conf, write_conf=True)
+    return scale_x, scale_y
 
-#         start_time, fps_total, frame_count, avg_fps = count_fps(start_time, fps_total, frame_count)
-#         fps_text = "FPS: {:.2f}".format(avg_fps)
-#         cv.putText(frame, fps_text, (30, 430), cv.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,0,255), 1)
-
-#         cv.imshow('video', frame)
-        
-#         if cv.waitKey(1) & 0xFF == ord('q'):
-#             break
-    
-#     if capture:
-#         capture.release()
-#     cv.destroyAllWindows()
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_sigint)
