@@ -51,8 +51,10 @@ print("Redis server running: ", RemoteDisplay.ping())
 
 time.sleep(1)
 
+address1 = "F3:2F:38:4B:9E:7E"
+address2 = "F3:D6:58:89:7D:CF"
+
 UART_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-UART_RX_CHAR_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 UART_TX_CHAR_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
 
@@ -64,37 +66,10 @@ def get_offset(reading, offset):
     
     return offset_val
 
-# TIP: you can get this function and more from the ``more-itertools`` package.
-def sliced(data: bytes, n: int) -> Iterator[bytes]:
-    """
-    Slices *data* into chunks of size *n*. The last slice may be smaller than
-    *n*.
-    """
-    return takewhile(len, (data[i : i + n] for i in count(0, n)))
-
-async def uart_terminal():
-    """This is a simple "terminal" program that uses the Nordic Semiconductor
-    (nRF) UART service. It reads from stdin and sends each line of data to the
-    remote device. Any data received from the device is printed to stdout.
-    """
-
-    def match_nus_uuid(device: BLEDevice, adv: AdvertisementData):
-        # This assumes that the device includes the UART service UUID in the
-        # advertising data. This test may need to be adjusted depending on the
-        # actual advertising data supplied by the device.
-        if UART_SERVICE_UUID.lower() in adv.service_uuids:
-            return True
-
-        return False
-
-    device = await BleakScanner.find_device_by_filter(match_nus_uuid)
-
-    if device is None:
-        print("no matching device found, you may need to edit match_nus_uuid().")
-        sys.exit(1)
+async def uart_terminal(device, dev_num):
 
     def handle_disconnect(_: BleakClient):
-        print("Device was disconnected, goodbye.")
+        print("Device {} was disconnected, goodbye.".format(dev_num))
         # cancelling all tasks effectively ends the program
         for task in asyncio.all_tasks():
             task.cancel()
@@ -102,104 +77,116 @@ async def uart_terminal():
         exit_flag = True
 
     def handle_rx(_: BleakGATTCharacteristic, data: bytearray):
-        global grabbing, offset, toggle, hold_position, last_heading
-        print("received:", data)
-        data = data.decode('utf-8')
-        data = data.split(",")
-        
-        roll = float(data[0])
-        pitch = float(data[1])
-        heading = float(data[2])
-        claw = float(data[3])
-        btn = 0
-        
-        if (btn == 1):
-            toggle = 1
+        global offset, grabbing, last_heading, toggle, hold_position
+        if dev_num == 1:
+            #global grabbing, last_heading
+            print("received:", data)
+            data = data.decode('utf-8')
+            data = data.split(",")
+            
+            roll = float(data[0])
+            pitch = float(data[1])
+            heading = float(data[2])
+            claw = float(data[3])
+            # btn = 0
+            
+            # if (btn == 1):
+            #     toggle = 1
 
-        elif (btn == 2 and not holding_block):
-            Arm.Arm_serial_servo_write6(last_heading, 135, 0, 0, 90, 0, 1000)
-            hold_position = not hold_position
+            # elif (btn == 2 and not holding_block):
+            #     Arm.Arm_serial_servo_write6(last_heading, 135, 0, 0, 90, 0, 1000)
+            #     hold_position = not hold_position
 
-        elif (btn == 3):
-            offset = -99999
-        if (offset == -99999):
-            offset = 90 - heading
+            # elif (btn == 3):
+            #     offset = -99999
+            if (offset == -99999):
+                offset = 90 - heading
 
-        if hold_position and claw == 69:
-            grabbing = 1
+            if hold_position and claw == 69:
+                grabbing = 1
+            
+            offset_heading = get_offset(heading, offset)
+            heading = offset_heading
+            
+            if (heading < 0):
+                if (heading > -90):
+                    heading = 0
+                else:
+                    heading = 180
         
-        offset_heading = get_offset(heading, offset)
-        heading = offset_heading
-        
-        if (heading < 0):
-            if (heading > -90):
-                heading = 0
-            else:
-                heading = 180
-	
-        if (roll < -90):
-                roll = -90
-        if (roll > 90):
-                roll = 90
+            if (roll < -90):
+                    roll = -90
+            if (roll > 90):
+                    roll = 90
 
-        if (hold_position == 0):
-            last_heading = heading
-            #pitch above 90 degrees, bend servo 3 only    
-            if (pitch <= 0):
-                Arm.Arm_serial_servo_write6(heading, 90, abs(pitch), 90, roll+90, 0, 500)
-                
-            #pitch below 90 degrees, bend servo 2 and 4, servo 3 stays at 90 degrees
-            if (pitch > 0):
-                ang2 = pitch + 90
-                ang4 = 75 - pitch
-                if (ang2 > 120):
-                    ang2 = 120
-                if (ang4 < 0):
-                    ang4 = 0
-                    ang2 = interp(pitch, [75, 90], [120, 90])
-                
-                Arm.Arm_serial_servo_write6(heading, ang2, 0, ang4, roll+90, 0, 500)
+            if (hold_position == 0):
+                last_heading = heading
+                #pitch above 90 degrees, bend servo 3 only    
+                if (pitch <= 0):
+                    Arm.Arm_serial_servo_write6(heading, 90, abs(pitch), 90, roll+90, 0, 500)
+                    
+                #pitch below 90 degrees, bend servo 2 and 4, servo 3 stays at 90 degrees
+                if (pitch > 0):
+                    ang2 = pitch + 90
+                    ang4 = 75 - pitch
+                    if (ang2 > 120):
+                        ang2 = 120
+                    if (ang4 < 0):
+                        ang4 = 0
+                        ang2 = interp(pitch, [75, 90], [120, 90])
+                    
+                    Arm.Arm_serial_servo_write6(heading, ang2, 0, ang4, roll+90, 0, 500)
+            
+            if holding_block and not grabbing:
+                Arm.Arm_serial_servo_write(1, heading, 500)
         
-        if holding_block and not grabbing:
-            Arm.Arm_serial_servo_write(1, heading, 500)
+        else:
+            #global toggle, hold_position
+            print("button:", data)
+            data = data.decode('utf-8')
+            btn = float(data)
+            print(btn)
+            
+            if (btn == 1):
+                toggle = 1
+
+            elif (btn == 2 and not holding_block):
+                Arm.Arm_serial_servo_write6(last_heading, 135, 0, 0, 90, 0, 1000)
+                hold_position = not hold_position
+
+            elif (btn == 3):
+                offset = -99999
 
     async with BleakClient(device, disconnected_callback=handle_disconnect) as client:
         await client.start_notify(UART_TX_CHAR_UUID, handle_rx)
 
-        capture_thread = threading.Thread(target=capture_frames)
-        process_thread = threading.Thread(target=process_frames)
+        if dev_num == 1:
+            capture_thread = threading.Thread(target=capture_frames)
+            process_thread = threading.Thread(target=process_frames)
 
-        capture_thread.start()
-        process_thread.start()
+            capture_thread.start()
+            process_thread.start()
 
-        print("Connected, start typing and press ENTER...")
+        print("Connected to device {}, receiving data...".format(dev_num))
 
-        loop = asyncio.get_running_loop()
-        nus = client.services.get_service(UART_SERVICE_UUID)
-        rx_char = nus.get_characteristic(UART_RX_CHAR_UUID)
+        while True:
+            await asyncio.sleep(1)
 
-        while not exit_flag:
-            # This waits until you type a line and press ENTER.
-            # A real terminal program might put stdin in raw mode so that things
-            # like CTRL+C get passed to the remote device.
-            data = await loop.run_in_executor(None, sys.stdin.buffer.readline)
+async def main():
+    device1 = await BleakScanner.find_device_by_address(address1)
+    if device1 is None:
+        print("device 1 not found")
+        sys.exit(1)
 
-            # data will be empty on EOF (e.g. CTRL+D on *nix)
-            if not data:
-                break
+    device2 = await BleakScanner.find_device_by_address(address2)
+    if device2 is None:
+        print("device 2 not found")
+        sys.exit(1)
 
-            # some devices, like devices running MicroPython, expect Windows
-            # line endings (uncomment line below if needed)
-            # data = data.replace(b"\n", b"\r\n")
-
-            # Writing without response requires that the data can fit in a
-            # single BLE packet. We can use the max_write_without_response_size
-            # property to split the data into chunks that will fit.
-
-            for s in sliced(data, rx_char.max_write_without_response_size):
-                await client.write_gatt_char(rx_char, s, response=False)
-
-            print("sent:", data)
+    await asyncio.gather(
+        uart_terminal(device1, 1),
+        uart_terminal(device2, 2)
+    )
 
 def handle_sigint(signal_number, frame):
     print(" Exiting...")
@@ -335,7 +322,7 @@ if __name__ == "__main__":
     signal.signal(signal.SIGINT, handle_sigint)
     
     try:
-        asyncio.run(uart_terminal())
+        asyncio.run(main())
     except asyncio.CancelledError:
         # task is cancelled on disconnect, so we ignore this error
         pass
