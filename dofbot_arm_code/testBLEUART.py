@@ -47,6 +47,7 @@ holding_block = 0
 host = '192.168.18.211'
 #host = '192.168.11.17'
 RemoteDisplay = ImageTransferService.ImageTransferService(host)
+print("Redis server running: ", RemoteDisplay.ping())
 
 time.sleep(1)
 
@@ -110,7 +111,7 @@ async def uart_terminal():
         pitch = float(data[1])
         heading = float(data[2])
         claw = float(data[3])
-        btn = float(data[4])
+        btn = 0
         
         if (btn == 1):
             toggle = 1
