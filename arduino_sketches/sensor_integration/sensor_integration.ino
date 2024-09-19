@@ -645,7 +645,7 @@ void sendBLEData(void)
   static uint32_t ii=0, xx=10;
   char str[26];
   
-  sprintf(str, "%d, %d, %d, %d, %d", int(roll), int(pitch), int(heading), fist2);
+  sprintf(str, "%d, %d, %d, %d", int(roll), int(pitch), int(heading), fist2);
   Serial.println(str);
   bleuart.print(str);
   //delay(xx);
