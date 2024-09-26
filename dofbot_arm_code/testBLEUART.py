@@ -150,9 +150,9 @@ async def uart_terminal(device, dev_num):
             if (btn == 1):
                 toggle = 1
 
-            elif (btn == 2 and not holding_block):
-                Arm.Arm_serial_servo_write6(last_heading, 135, 0, 0, 90, 0, 1000)
-                hold_position = not hold_position
+            # elif (btn == 2 and not holding_block):
+            #     Arm.Arm_serial_servo_write6(last_heading, 135, 0, 0, 90, 0, 1000)
+            #     hold_position = not hold_position
 
             elif (btn == 3):
                 offset = -99999
