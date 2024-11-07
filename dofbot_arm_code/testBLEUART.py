@@ -77,7 +77,7 @@ async def uart_terminal(device, dev_num):
         exit_flag = True
 
     def handle_rx(_: BleakGATTCharacteristic, data: bytearray):
-        global offset, grabbing, last_heading, toggle, hold_position
+        global offset, grabbing, last_heading, toggle
         if dev_num == 1:
             #global grabbing, last_heading
             print("received:", data)
@@ -102,7 +102,7 @@ async def uart_terminal(device, dev_num):
             if (offset == -99999):
                 offset = 90 - heading
 
-            if hold_position and claw == 69:
+            if claw == 69:
                 grabbing = 1
             
             offset_heading = get_offset(heading, offset)
@@ -119,7 +119,7 @@ async def uart_terminal(device, dev_num):
             if (roll > 90):
                     roll = 90
 
-            if (hold_position == 0):
+            if (not holding_block and not grabbing):
                 last_heading = heading
                 #pitch above 90 degrees, bend servo 3 only    
                 if (pitch <= 0):
@@ -145,16 +145,16 @@ async def uart_terminal(device, dev_num):
             print("button:", data)
             data = data.decode('utf-8')
             btn = float(data)
-            print(btn)
+            #print(btn)
             
             if (btn == 1):
                 toggle = 1
 
-            elif (btn == 2 and not holding_block):
-                Arm.Arm_serial_servo_write6(last_heading, 135, 0, 0, 90, 0, 1000)
-                hold_position = not hold_position
+            # elif (btn == 2 and not holding_block):
+            #     Arm.Arm_serial_servo_write6(last_heading, 135, 0, 0, 90, 0, 1000)
+            #     hold_position = not hold_position
 
-            elif (btn == 3):
+            elif (btn == 2 or btn == 3):
                 offset = -99999
 
     async with BleakClient(device, disconnected_callback=handle_disconnect) as client:
@@ -219,6 +219,9 @@ def capture_frames():
         with lock:
             frame = new_frame 
 
+first_time = 1
+prev_time = 0
+
 def process_frames():
     start_time = time.time()
     fps_total = 0
@@ -227,7 +230,7 @@ def process_frames():
     target_obj = ''
     obj_index = 0
     cntr = None
-    global frame, toggle, grabbing, holding_block, hold_position, last_heading
+    global frame, toggle, grabbing, holding_block, last_heading, prev_time, first_time
     yolo = YOLO('yolov4-tiny-custom_best.weights', 'yolov4-tiny-test.cfg', 'obj.names')
     while not exit_flag:
         if frame is not None:
@@ -246,10 +249,9 @@ def process_frames():
                     if arm_service.move_status:
                         time.sleep(4)
                     grabbing = 0
-                    hold_position = 0
                     holding_block = 0
 
-            elif hold_position and not holding_block:
+            else:
                 for x in label:
                     if x not in current_objects:
                         current_objects.append(x)
@@ -271,26 +273,37 @@ def process_frames():
                     cv.putText(current_frame, targ_txt, (30, 30), cv.FONT_HERSHEY_COMPLEX_SMALL, 1, (0,0,255), 1)
 
                     if grabbing:
-                        if target_obj in label:
-                            i = label.index(target_obj)
-                            centre = (int((bbox[i][0] + bbox[i][2])/2), int((bbox[i][1] + bbox[i][3])/2))
-                            scale_x, scale_y = scaling(centre[0], centre[1])
-                            cntr = (round((((centre[0]*scale_x) - 320) / 4000), 5), round(((480 - (centre[1]*scale_y)) / 3000) * 0.8+0.19, 5))
-                        else:
-                            cntr = None
+                        # last_heading  = Arm.Arm_serial_servo_read(1)
+                        if first_time:
+                            Arm.Arm_serial_servo_write6(last_heading, 135, 0, 0, 90, 0, 500)
+                            prev_time = time.time()
+                            first_time = 0
 
-                        last_heading  = Arm.Arm_serial_servo_read(1)
-                        arm_service.xy = [last_heading, 135]
-                        threading.Thread(target=arm_service.target_run, args=(cntr,)).start()
-                        if arm_service.move_status:
-                            time.sleep(6)
-                            if not arm_service.exceed_angle:
-                                holding_block = 1
+                        cur_time = time.time()
+                        if cur_time - prev_time > 2:
+                        #grabbing = 0
+                            if target_obj in label:
+                                i = label.index(target_obj)
+                                centre = (int((bbox[i][0] + bbox[i][2])/2), int((bbox[i][1] + bbox[i][3])/2))
+                                scale_x, scale_y = scaling(centre[0], centre[1])
+                                cntr = (round((((centre[0]*scale_x) - 320) / 4000), 5), round(((480 - (centre[1]*scale_y)) / 3000) * 0.8+0.19, 5))
                             else:
-                                arm_service.exceed_angle = 0
-                        grabbing = 0
-            else:
-                current_objects.clear()
+                                cntr = None
+
+                            last_heading  = Arm.Arm_serial_servo_read(1)
+                            arm_service.xy = [last_heading, 135]
+                            threading.Thread(target=arm_service.target_run, args=(cntr,)).start()
+                            if arm_service.move_status:
+                                time.sleep(6)
+                                if not arm_service.exceed_angle:
+                                    holding_block = 1
+                                else:
+                                    arm_service.exceed_angle = 0
+                            first_time = 1
+                            grabbing = 0
+                            current_objects.clear()
+            # else:
+            #     current_objects.clear()
             
             start_time, fps_total, frame_count, avg_fps = count_fps(start_time, fps_total, frame_count)
             fps_text = "FPS: {:.2f}".format(avg_fps)
