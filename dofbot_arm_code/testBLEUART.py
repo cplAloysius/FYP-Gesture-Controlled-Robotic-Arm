@@ -44,8 +44,8 @@ frame = None
 lock = threading.Lock()
 holding_block = 0
 
-host = '192.168.18.211'
-#host = '192.168.11.17'
+#host = '192.168.18.211'
+host = '192.168.11.17'
 RemoteDisplay = ImageTransferService.ImageTransferService(host)
 print("Redis server running: ", RemoteDisplay.ping())
 
@@ -157,7 +157,7 @@ async def uart_terminal(device, dev_num):
             elif (btn == 2 or btn == 3):
                 offset = -99999
 
-    async with BleakClient(device, disconnected_callback=handle_disconnect) as client:
+    async with BleakClient(device) as client:
         await client.start_notify(UART_TX_CHAR_UUID, handle_rx)
 
         if dev_num == 1:
